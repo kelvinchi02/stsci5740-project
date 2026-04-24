@@ -1,0 +1,35 @@
+---
+title: "STSCI 5740 Project Report"
+format: pdf
+fontsize: 12pt
+papersize: a4
+linestretch: 1.5
+---
+
+## Report Inputs
+
+This report links directly to artifacts produced by STSCI5740_Data.qmd.
+
+```{r}
+summary_path <- "artifacts/data/readmission_by_age.csv"
+figure_path <- "artifacts/figures/readmission_by_age.png"
+
+if (!file.exists(summary_path) || !file.exists(figure_path)) {
+  stop("Missing artifacts. Render STSCI5740_Data.qmd first.")
+}
+
+summary_tbl <- read.csv(summary_path)
+summary_tbl
+```
+
+## Readmission Summary by Age
+
+```{r}
+knitr::kable(summary_tbl, digits = 4, caption = "Readmission summary by age group")
+```
+
+## Readmission Figure
+
+```{r}
+knitr::include_graphics(figure_path)
+```

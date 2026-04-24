@@ -1,0 +1,8 @@
+{
+  "files.associations": {
+    "*.qmd": "quarto"
+  },
+  "workbench.editorAssociations": {
+    "*.qmd": "quarto.visualEditor"
+  }
+}

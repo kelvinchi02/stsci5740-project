@@ -6,30 +6,6 @@ papersize: a4
 linestretch: 1.5
 ---
 
-## Report Inputs
+## Introduction
 
-This report links directly to artifacts produced by STSCI5740_Data.qmd.
-
-```{r}
-summary_path <- "artifacts/data/readmission_by_age.csv"
-figure_path <- "artifacts/figures/readmission_by_age.png"
-
-if (!file.exists(summary_path) || !file.exists(figure_path)) {
-  stop("Missing artifacts. Render STSCI5740_Data.qmd first.")
-}
-
-summary_tbl <- read.csv(summary_path)
-summary_tbl
-```
-
-## Readmission Summary by Age
-
-```{r}
-knitr::kable(summary_tbl, digits = 4, caption = "Readmission summary by age group")
-```
-
-## Readmission Figure
-
-```{r}
-knitr::include_graphics(figure_path)
-```
+This project explores hospital readmission patterns among patients with diabetes, with emphasis on broad trends across patient groups. The analysis is based on the Diabetes 130-US hospitals dataset (1999-2008) from the UCI Machine Learning Repository. For the latest project materials and updates, visit our GitHub repository: [stsci5740-project](https://github.com/kelvinchi02/stsci5740-project).

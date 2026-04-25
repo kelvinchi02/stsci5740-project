@@ -1,6 +1,12 @@
 ---
 title: "STSCI 5740 Project Report"
-format: pdf
+format:
+  pdf:
+    geometry:
+      - top=0.75in
+      - bottom=0.75in
+      - left=0.75in
+      - right=0.75in
 fontsize: 12pt
 papersize: a4
 linestretch: 1.5
@@ -66,3 +72,52 @@ Administrative ID fields were converted from integer codes to descriptive labels
 ### 6. Final Cleaning Output
 
 After row-level cleaning and diagnosis recoding, the cleaned patient-level dataset contained 71,504 records.
+
+## Exploratory Data Analysis (EDA)
+
+This section summarizes the main patterns observed in the exploratory analyses performed on the cleaned patient-level dataset.
+
+### 1. Outcome Distribution
+
+The binary readmission target is highly imbalanced:
+
+- Non-readmitted within 30 days (`readmitted_binary = 0`): 65,213
+- Readmitted within 30 days (`readmitted_binary = 1`): 6,291
+
+This imbalance should be considered when evaluating predictive models, since accuracy alone may overstate performance.
+
+### 2. Categorical Distribution Patterns
+
+Faceted bar charts were used to examine race, age, diagnosis groups, and the 24 medication indicators.
+
+Main observations:
+
+- `race` is dominated by Caucasian patients, followed by African American patients.
+- Age is concentrated in older brackets, especially 60--90 years.
+- Most medication variables are dominated by the `No` category, indicating that many prescriptions are not used for most encounters.
+- The readmitted class remains a small minority across most categorical levels.
+
+### 3. Numerical Variable Distributions
+
+Density plots were created for numeric variables such as `time_in_hospital`, `num_lab_procedures`, `num_medications`, `number_diagnoses`, and utilization counts, split by readmission class.
+
+Main observations:
+
+- Most numeric utilization variables are right-skewed.
+- The readmitted and non-readmitted groups overlap substantially, but the readmitted group tends to show slightly heavier tails in several utilization measures.
+
+### 4. Correlation Structure
+
+A correlation heatmap was generated across all numeric variables to assess potential multicollinearity.
+
+Main observations:
+
+- Most correlations are low to moderate.
+- The strongest relationships are among clinical utilization variables, such as `time_in_hospital`, `num_medications`, `num_procedures`, and `num_lab_procedures`.
+- No severe multicollinearity pattern is evident among the core predictors.
+
+### 5. Statistical Summary Table
+
+A stratified Table 1 was generated to compare all features by readmission class and to test for group differences.
+
+This table provides a concise baseline comparison of demographic, diagnostic, utilization, and treatment variables before model training.

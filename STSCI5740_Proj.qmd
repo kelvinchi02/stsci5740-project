@@ -18,60 +18,27 @@ This project examines hospital readmission patterns among patients with diabetes
 
 ## Data Cleaning
 
-This section documents the data cleaning workflow applied in `STSCI5740_Data.ipynb`. The purpose is to construct an analysis-ready patient-level table while preserving clinical interpretability.
-
-### 1. Patient-Level Deduplication
-
-To enforce independent observations, only the first encounter for each unique `patient_nbr` was retained.
-
-- Rows before deduplication: 101,766
-- Rows after deduplication: 71,518
+This section documents the data cleaning workflow applied to the UCI Diabetes dataset. The purpose was to construct an analysis-ready patient-level table while preserving clinical interpretability and ensuring the dataset satisfies the statistical assumptions required for modeling. \### 1. Patient-Level Deduplication To enforce the assumption of **independent and identically distributed (IID)** observations, only the first encounter for each unique `patient_nbr` was retained. \* **Rationale:** Multiple hospitalizations for the same patient introduce intra-subject correlation. If left uncorrected, the model would overfit to the specific clinical patterns of "frequent flyers" rather than learning generalized predictors of readmission. \* **Impact:** Dataset reduced from 101,766 to 71,518 observations.
 
 ### 2. Sparse Feature Removal
 
-Columns with substantial missingness were removed:
-
-- `weight`
-- `medical_specialty`
-- `payer_code`
-
-After column removal, the dataset dimension was 71,518 x 47.
+Columns with substantial missingness were removed: `weight`, `medical_specialty`, and `payer_code`. \* **Rationale:** Including variables with extreme sparsity—specifically `weight`, which was missing in over 97% of records—would necessitate massive imputation. This would likely introduce significant noise or bias into the model without providing a corresponding gain in predictive power. \* **Impact:** The feature space was narrowed to 47 columns to focus on high-quality predictors.
 
 ### 3. Missing and Invalid Value Treatment
 
-Missing and invalid values were handled as follows:
-
-- `race`: missing values were mapped to `Other` (1,948 values filled after deduplication).
-- `max_glu_serum` and `A1Cresult`: `None` was preserved as an explicit category representing tests not ordered.
-- `gender`: rows labeled `Unknown/Invalid` were dropped (3 rows).
-- `diag_1`: rows with missing primary diagnosis were dropped (11 rows).
-- `diag_2` and `diag_3`: missing values were mapped to `None` and treated as a meaningful category.
+Missing and invalid values were handled strategically to preserve sample size while maintaining data integrity: \* **`race`**: Missing values were mapped to `Other`. **Rationale:** This prevents the loss of nearly 2,000 observations while acknowledging the demographic uncertainty within the data. \* **`max_glu_serum` and `A1Cresult`**: The level `None` was preserved as an explicit category. **Rationale:** In a clinical context, the absence of a test is an active provider decision that may correlate with the patient’s perceived stability or lower risk profile. \* **`gender` and `diag_1`**: Rows labeled `Unknown/Invalid` gender (3 rows) or missing primary diagnosis (11 rows) were dropped. **Rationale:** These records were statistically negligible and lacked the fundamental information required for a classification task. \* **`diag_2` and `diag_3`**: Missing values were mapped to `None`. **Rationale:** Unlike the primary diagnosis, a missing secondary or tertiary diagnosis likely indicates that the patient has no further comorbidities, which serves as a meaningful clinical signal for lower complexity.
 
 ### 4. Diagnosis Code Consolidation
 
-`diag_1`, `diag_2`, and `diag_3` ICD-9 diagnosis codes were consolidated into nine clinical groups:
-
-- Circulatory
-- Respiratory
-- Digestive
-- Diabetes
-- Injury
-- Musculoskeletal
-- Genitourinary
-- Neoplasms
-- Other
+The ICD-9 diagnosis codes for `diag_1`, `diag_2`, and `diag_3` were consolidated into nine clinical groups (e.g., Circulatory, Respiratory, Diabetes). \* **Rationale:** The raw data contained hundreds of distinct ICD-9 codes. Leaving these unmapped would lead to a "curse of dimensionality" during dummy encoding, resulting in an unstable model with too many parameters. This consolidation preserves the clinical essence of the comorbidities while making the model parsimonious.
 
 ### 5. Metadata Label Mapping
 
-Administrative ID fields were converted from integer codes to descriptive labels using the parsed IDS mapping tables:
-
-- `admission_type_id`
-- `discharge_disposition_id`
-- `admission_source_id`
+Administrative ID fields were converted from integer codes to descriptive labels using the parsed IDS mapping tables: `admission_type_id`, `discharge_disposition_id`, and `admission_source_id`. \* **Rationale:** Converting these IDs into nominal factors ensures that the models (particularly Lasso and Ridge) do not incorrectly treat them as continuous ordinal values. This transformation is necessary to capture the qualitative impact of how a patient entered or left the hospital.
 
 ### 6. Final Cleaning Output
 
-After row-level cleaning and diagnosis recoding, the cleaned patient-level dataset contained 71,504 records.
+After row-level deduplication and diagnosis recoding, the cleaned patient-level dataset contained **47 columns** and **71,504 records**. This refined dataset provides the robust foundation required for the subsequent Exploratory Data Analysis and model training phases.
 
 ## Exploratory Data Analysis (EDA)
 
@@ -79,45 +46,37 @@ This section summarizes the main patterns observed in the exploratory analyses p
 
 ### 1. Outcome Distribution
 
-The binary readmission target is highly imbalanced:
-
-- Non-readmitted within 30 days (`readmitted_binary = 0`): 65,213
-- Readmitted within 30 days (`readmitted_binary = 1`): 6,291
-
-This imbalance should be considered when evaluating predictive models, since accuracy alone may overstate performance.
+The binary readmission target is highly imbalanced: - Non-readmitted within 30 days (`readmitted_binary = 0`): 65,213 - Readmitted within 30 days (`readmitted_binary = 1`): 6,291 This imbalance should be considered when evaluating predictive models, since accuracy alone may overstate performance.
 
 ### 2. Categorical Distribution Patterns
 
-Faceted bar charts were used to examine race, age, diagnosis groups, and the 24 medication indicators.
-
-Main observations:
-
-- `race` is dominated by Caucasian patients, followed by African American patients.
-- Age is concentrated in older brackets, especially 60--90 years.
-- Most medication variables are dominated by the `No` category, indicating that many prescriptions are not used for most encounters.
-- The readmitted class remains a small minority across most categorical levels.
+Faceted bar charts were used to examine race, age, diagnosis groups, and the 24 medication indicators. Main observations: - `race` is dominated by Caucasian patients, followed by African American patients. - Age is concentrated in older brackets, especially 60--90 years. - Most medication variables are dominated by the `No` category, indicating that many prescriptions are not used for most encounters. - The readmitted class remains a small minority across most categorical levels.
 
 ### 3. Numerical Variable Distributions
 
-Density plots were created for numeric variables such as `time_in_hospital`, `num_lab_procedures`, `num_medications`, `number_diagnoses`, and utilization counts, split by readmission class.
-
-Main observations:
-
-- Most numeric utilization variables are right-skewed.
-- The readmitted and non-readmitted groups overlap substantially, but the readmitted group tends to show slightly heavier tails in several utilization measures.
+Density plots were created for numeric variables such as `time_in_hospital`, `num_lab_procedures`, `num_medications`, `number_diagnoses`, and utilization counts, split by readmission class. Main observations: - Most numeric utilization variables are right-skewed. - The readmitted and non-readmitted groups overlap substantially, but the readmitted group tends to show slightly heavier tails in several utilization measures.
 
 ### 4. Correlation Structure
 
-A correlation heatmap was generated across all numeric variables to assess potential multicollinearity.
+A correlation heatmap was generated across all numeric variables to assess potential multicollinearity. Main observations: - Most correlations are low to moderate. - The strongest relationships are among clinical utilization variables, such as `time_in_hospital`, `num_medications`, `num_procedures`, and `num_lab_procedures`. - No severe multicollinearity pattern is evident among the core predictors.
 
-Main observations:
+## Linear Modeling
 
-- Most correlations are low to moderate.
-- The strongest relationships are among clinical utilization variables, such as `time_in_hospital`, `num_medications`, `num_procedures`, and `num_lab_procedures`.
-- No severe multicollinearity pattern is evident among the core predictors.
+We prioritize regularized and interpretable models over stepwise subset selection.
 
-### 5. Statistical Summary Table
+- **Lasso (**$L_1$) and **Ridge (**$L_2$) are the primary linear models.
+- We avoid forward/backward/best-subset methods because they are greedy and often unstable in high-dimensional settings.
+- Lasso performs feature selection through sparsity, while Ridge shrinks coefficients to reduce multicollinearity without removing predictors.
 
-A stratified Table 1 was generated to compare all features by readmission class and to test for group differences.
+To capture nonlinear effects while preserving interpretability, we also fit **Generalized Additive Models (GAMs)**.
 
-This table provides a concise baseline comparison of demographic, diagnostic, utilization, and treatment variables before model training.
+- Lasso and Ridge assume linear effects on the log-odds of readmission.
+- GAMs use penalized splines to model nonlinear patterns in continuous predictors such as `age` and `time_in_hospital`.
+- This progression from regularized linear models to semi-parametric GAMs improves flexibility while preserving clinical interpretability.
+
+### Encoding and Train-Test Split
+
+1.  **Initial Split:** Separate the cleaned data into `train_data` and `test_data` using an 80/20 split.
+2.  **Define Recipe:** Create the preprocessing blueprint (for example, dummy encoding and feature scaling).
+3.  **Prep:** Learn preprocessing parameters (such as factor levels and scaling statistics) from `train_data` only.
+4.  **Bake:** Apply the trained preprocessing parameters to both `train_data` and `test_data`.

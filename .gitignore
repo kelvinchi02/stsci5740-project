@@ -10,6 +10,9 @@ _output/
 __pycache__/
 *.pyc
 
+# R
+.Rhistory
+
 # OS
 .DS_Store
 Thumbs.db

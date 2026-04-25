@@ -15,7 +15,4 @@ __pycache__/
 Thumbs.db
 
 # VS Code workspace settings
-.vscode/*
-!.vscode/settings.json
-!.vscode/extensions.json
-!.vscode/tasks.json
+.vscode/

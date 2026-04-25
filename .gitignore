@@ -13,3 +13,9 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# VS Code workspace settings
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json

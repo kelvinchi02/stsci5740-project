@@ -8,4 +8,61 @@ linestretch: 1.5
 
 ## Introduction
 
-This project explores hospital readmission patterns among patients with diabetes, with emphasis on broad trends across patient groups. The analysis is based on the Diabetes 130-US hospitals dataset (1999-2008) from the UCI Machine Learning Repository. For the latest project materials and updates, visit our GitHub repository: [stsci5740-project](https://github.com/kelvinchi02/stsci5740-project).
+This project examines hospital readmission patterns among patients with diabetes, with emphasis on broad trends across patient groups. The analysis uses the Diabetes 130-US hospitals dataset (1999-2008) from the UCI Machine Learning Repository. Project materials and updates are available on GitHub: [stsci5740-project](https://github.com/kelvinchi02/stsci5740-project).
+
+## Data Cleaning
+
+This section documents the data cleaning workflow applied in `STSCI5740_Data.ipynb`. The purpose is to construct an analysis-ready patient-level table while preserving clinical interpretability.
+
+### 1. Patient-Level Deduplication
+
+To enforce independent observations, only the first encounter for each unique `patient_nbr` was retained.
+
+- Rows before deduplication: 101,766
+- Rows after deduplication: 71,518
+
+### 2. Sparse Feature Removal
+
+Columns with substantial missingness were removed:
+
+- `weight`
+- `medical_specialty`
+- `payer_code`
+
+After column removal, the dataset dimension was 71,518 x 47.
+
+### 3. Missing and Invalid Value Treatment
+
+Missing and invalid values were handled as follows:
+
+- `race`: missing values were mapped to `Other` (1,948 values filled after deduplication).
+- `max_glu_serum` and `A1Cresult`: `None` was preserved as an explicit category representing tests not ordered.
+- `gender`: rows labeled `Unknown/Invalid` were dropped (3 rows).
+- `diag_1`: rows with missing primary diagnosis were dropped (11 rows).
+- `diag_2` and `diag_3`: missing values were mapped to `None` and treated as a meaningful category.
+
+### 4. Diagnosis Code Consolidation
+
+`diag_1`, `diag_2`, and `diag_3` ICD-9 diagnosis codes were consolidated into nine clinical groups:
+
+- Circulatory
+- Respiratory
+- Digestive
+- Diabetes
+- Injury
+- Musculoskeletal
+- Genitourinary
+- Neoplasms
+- Other
+
+### 5. Metadata Label Mapping
+
+Administrative ID fields were converted from integer codes to descriptive labels using the parsed IDS mapping tables:
+
+- `admission_type_id`
+- `discharge_disposition_id`
+- `admission_source_id`
+
+### 6. Final Cleaning Output
+
+After row-level cleaning and diagnosis recoding, the cleaned patient-level dataset contained 71,504 records.

@@ -1,82 +1,366 @@
 ---
 title: "STSCI 5740 Project Report"
+author: "Kelvin Chi (kc2346), Nina Wang (nw348), Tianle Pang (tp439) and Xibei Xie (xx375)"
 format:
   pdf:
+    toc: false
+    number-sections: true
+    number-offset: [0]
+    top-level-division: section
+    fontsize: 12pt
+    papersize: a4
+    linestretch: 1.5
+    fig-align: center
     geometry:
-      - top=0.75in
-      - bottom=0.75in
-      - left=0.75in
-      - right=0.75in
-fontsize: 12pt
-papersize: a4
-linestretch: 1.5
+      - margin=0.5in
+      - heightrounded
+    include-in-header:
+      text: |
+        \usepackage{etoolbox}
+        \usepackage{setspace}
+        \usepackage{caption}
+        \usepackage{array}
+        \DeclareCaptionFont{eightpt}{\fontsize{8}{9.6}\selectfont}
+        \newcommand{\ninept}{\fontsize{9}{10.8}\selectfont}
+        \captionsetup[figure]{font=eightpt}
+        \setlength{\tabcolsep}{2pt}
+        \renewcommand{\arraystretch}{0.92}
+        \setlength{\aboverulesep}{0pt}
+        \setlength{\belowrulesep}{0pt}
+        \setlength{\extrarowheight}{0pt}
+        \setlength{\LTleft}{0pt}
+        \setlength{\LTright}{0pt}
+        \setkeys{Gin}{width=0.40\linewidth,keepaspectratio=true}
+        \AtBeginEnvironment{figure}{\centering}
+        \AtBeginEnvironment{table}{\ninept\setstretch{1.0}}
+        \AtBeginEnvironment{longtable}{\ninept\setstretch{1.0}}
 ---
 
-## Introduction
+# Introduction
 
-This project examines hospital readmission patterns among patients with diabetes, with emphasis on broad trends across patient groups. The analysis uses the Diabetes 130-US hospitals dataset (1999-2008) from the UCI Machine Learning Repository. Project materials and updates are available on GitHub: [stsci5740-project](https://github.com/kelvinchi02/stsci5740-project).
+This project applies machine learning methods to predict hospital readmission outcomes among patients with diabetes using the **Diabetes 130-US hospitals dataset (1999-2008)** from the **UCI Machine Learning Repository**. The dataset contains inpatient encounter records from 130 U.S. hospitals and includes demographic variables, admission characteristics, diagnoses, laboratory information, medication usage, and prior healthcare utilization measures.
 
-## Data Cleaning
+The objective is to build and compare classification models for readmission prediction. Methods considered in this project include regularized logistic regression, general additive models, random forest, and gradient boosting. Model performance is compared to assess predictive accuracy and identify useful patterns in the data.
 
-This section documents the data cleaning workflow applied to the UCI Diabetes dataset. The purpose was to construct an analysis-ready patient-level table while preserving clinical interpretability and ensuring the dataset satisfies the statistical assumptions required for modeling. \### 1. Patient-Level Deduplication To enforce the assumption of **independent and identically distributed (IID)** observations, only the first encounter for each unique `patient_nbr` was retained. \* **Rationale:** Multiple hospitalizations for the same patient introduce intra-subject correlation. If left uncorrected, the model would overfit to the specific clinical patterns of "frequent flyers" rather than learning generalized predictors of readmission. \* **Impact:** Dataset reduced from 101,766 to 71,518 observations.
+Project code base are available on GitHub: [stsci5740-project](https://github.com/kelvinchi02/stsci5740-project).
 
-### 2. Sparse Feature Removal
+# Data Cleaning
 
-Columns with substantial missingness were removed: `weight`, `medical_specialty`, and `payer_code`. \* **Rationale:** Including variables with extreme sparsity—specifically `weight`, which was missing in over 97% of records—would necessitate massive imputation. This would likely introduce significant noise or bias into the model without providing a corresponding gain in predictive power. \* **Impact:** The feature space was narrowed to 47 columns to focus on high-quality predictors.
+This section summarizes the preprocessing steps used to transform the raw UCI Diabetes dataset into a modeling-ready patient-level dataset.
 
-### 3. Missing and Invalid Value Treatment
+## Patient-Level Deduplication
 
-Missing and invalid values were handled strategically to preserve sample size while maintaining data integrity: \* **`race`**: Missing values were mapped to `Other`. **Rationale:** This prevents the loss of nearly 2,000 observations while acknowledging the demographic uncertainty within the data. \* **`max_glu_serum` and `A1Cresult`**: The level `None` was preserved as an explicit category. **Rationale:** In a clinical context, the absence of a test is an active provider decision that may correlate with the patient’s perceived stability or lower risk profile. \* **`gender` and `diag_1`**: Rows labeled `Unknown/Invalid` gender (3 rows) or missing primary diagnosis (11 rows) were dropped. **Rationale:** These records were statistically negligible and lacked the fundamental information required for a classification task. \* **`diag_2` and `diag_3`**: Missing values were mapped to `None`. **Rationale:** Unlike the primary diagnosis, a missing secondary or tertiary diagnosis likely indicates that the patient has no further comorbidities, which serves as a meaningful clinical signal for lower complexity.
+To avoid repeated observations from the same patient, only the first encounter for each unique `patient_nbr` was retained. - Multiple encounters from the same patient may introduce dependence across rows. - Dataset size was reduced from **101,766** to **71,518** observations.
 
-### 4. Diagnosis Code Consolidation
+## Sparse Feature Removal
 
-The ICD-9 diagnosis codes for `diag_1`, `diag_2`, and `diag_3` were consolidated into nine clinical groups (e.g., Circulatory, Respiratory, Diabetes). \* **Rationale:** The raw data contained hundreds of distinct ICD-9 codes. Leaving these unmapped would lead to a "curse of dimensionality" during dummy encoding, resulting in an unstable model with too many parameters. This consolidation preserves the clinical essence of the comorbidities while making the model parsimonious.
+Variables with substantial missingness or limited modeling value were removed: - `weight` (96.01% missing) - `medical_specialty` (48.21% missing) - `payer_code` (43.41% missing) These variables contained a large proportion of missing values and would require extensive imputation with limited expected benefit.
 
-### 5. Metadata Label Mapping
+## Missing and Invalid Value Treatment
 
-Administrative ID fields were converted from integer codes to descriptive labels using the parsed IDS mapping tables: `admission_type_id`, `discharge_disposition_id`, and `admission_source_id`. \* **Rationale:** Converting these IDs into nominal factors ensures that the models (particularly Lasso and Ridge) do not incorrectly treat them as continuous ordinal values. This transformation is necessary to capture the qualitative impact of how a patient entered or left the hospital.
+Missing or ambiguous values were handled using variable-specific rules: - `race`: missing values grouped as `Other` - `max_glu_serum`, `A1Cresult`: `None` retained as a valid category - `gender`: `Unknown/Invalid` rows removed - `diag_1`: missing rows removed (11 observations) - `diag_2`, `diag_3`: missing values recoded as `None` This approach preserved sample size while maintaining consistency across predictors.
 
-### 6. Final Cleaning Output
+## Diagnosis Code Consolidation
 
-After row-level deduplication and diagnosis recoding, the cleaned patient-level dataset contained **47 columns** and **71,504 records**. This refined dataset provides the robust foundation required for the subsequent Exploratory Data Analysis and model training phases.
+ICD-9 diagnosis codes in `diag_1`, `diag_2`, and `diag_3` were grouped into broader clinical categories such as Circulatory, Respiratory, Digestive, Diabetes based on the first three digits of the code. This reduced the number of unique diagnosis categories from over 700 to a manageable set of 10 clinically meaningful groups. This reduced high-cardinality categorical levels and improved interpretability.
 
-## Exploratory Data Analysis (EDA)
+## Metadata Label Mapping
 
-This section summarizes the main patterns observed in the exploratory analyses performed on the cleaned patient-level dataset.
+Administrative ID variables were converted into descriptive categorical labels based on provided mapping. This prevents models from incorrectly treating these coded fields as numeric quantities.
 
-### 1. Outcome Distribution
+## Target Variable Creation
 
-The binary readmission target is highly imbalanced: - Non-readmitted within 30 days (`readmitted_binary = 0`): 65,213 - Readmitted within 30 days (`readmitted_binary = 1`): 6,291 This imbalance should be considered when evaluating predictive models, since accuracy alone may overstate performance.
+The original `readmitted` variable had three levels: `<30`, `>30`, and `NO`. For modeling purposes, a binary target variable `readmitted_binary` was created: - `readmitted_binary = 1` if `readmitted` = `<30` (indicating readmission within 30 days) - `readmitted_binary = 0` if `readmitted` = `>30` or `NO` (indicating no readmission within 30 days)
 
-### 2. Categorical Distribution Patterns
+## Final Output
 
-Faceted bar charts were used to examine race, age, diagnosis groups, and the 24 medication indicators. Main observations: - `race` is dominated by Caucasian patients, followed by African American patients. - Age is concentrated in older brackets, especially 60--90 years. - Most medication variables are dominated by the `No` category, indicating that many prescriptions are not used for most encounters. - The readmitted class remains a small minority across most categorical levels.
+After cleaning and preprocessing, the final dataset contained: - **71,504 observations** - **47 variables** This cleaned dataset was used for exploratory analysis and predictive modeling.
 
-### 3. Numerical Variable Distributions
+# Exploratory Data Analysis (EDA)
 
-Density plots were created for numeric variables such as `time_in_hospital`, `num_lab_procedures`, `num_medications`, `number_diagnoses`, and utilization counts, split by readmission class. Main observations: - Most numeric utilization variables are right-skewed. - The readmitted and non-readmitted groups overlap substantially, but the readmitted group tends to show slightly heavier tails in several utilization measures.
+This section summarizes the main empirical patterns observed in the cleaned patient-level dataset. The purpose of EDA is to understand variable distributions, identify potential data quality issues.
 
-### 4. Correlation Structure
+## Outcome Distribution
 
-A correlation heatmap was generated across all numeric variables to assess potential multicollinearity. Main observations: - Most correlations are low to moderate. - The strongest relationships are among clinical utilization variables, such as `time_in_hospital`, `num_medications`, `num_procedures`, and `num_lab_procedures`. - No severe multicollinearity pattern is evident among the core predictors.
+The binary readmission target is strongly imbalanced: - `readmitted_binary = 0` (not readmitted within 30 days): **65,213** - `readmitted_binary = 1` (readmitted within 30 days): **6,291** This corresponds to a minority class rate of approximately **8.8%**. Because the outcome variable is imbalanced, model evaluation focused primarily on ROC AUC and confusion-matrix-based classification summaries. Additional metrics such as precision, recall, and F1-score can be derived to assess minority-class detection performance.
 
-## Linear Modeling
+## Categorical Variable Patterns
 
-We prioritize regularized and interpretable models over stepwise subset selection.
+Faceted count plots were used to examine demographic, diagnosis, administrative, and medication variables.
 
-- **Lasso (**$L_1$) and **Ridge (**$L_2$) are the primary linear models.
-- We avoid forward/backward/best-subset methods because they are greedy and often unstable in high-dimensional settings.
-- Lasso performs feature selection through sparsity, while Ridge shrinks coefficients to reduce multicollinearity without removing predictors.
+Main observations: - `race` is dominated by Caucasian patients, followed by African American patients. - Age is concentrated in older groups, particularly ages **60-70**. - Several administrative categories contain uneven level frequencies. - Most medication indicators are dominated by the `No` category. - The positive readmission class remains a minority across nearly all factor levels. These patterns indicate class imbalance not only in the target variable, but also uneven representation across several predictors.
 
-To capture nonlinear effects while preserving interpretability, we also fit **Generalized Additive Models (GAMs)**.
+## Numerical Variable Distributions
 
-- Lasso and Ridge assume linear effects on the log-odds of readmission.
-- GAMs use penalized splines to model nonlinear patterns in continuous predictors such as `age` and `time_in_hospital`.
-- This progression from regularized linear models to semi-parametric GAMs improves flexibility while preserving clinical interpretability.
+Density plots were created for numerical predictors:
 
-### Preprocessing and Train-Test Split
+![Numerical predictor density plots by readmission status.](outputs/eda_numeric_distributions.png)
 
-1.  **Initial Split:** Separate the cleaned data into `train_data` and `test_data` using an 80/20 split.
-2.  **Prep:** Learn preprocessing parameters (such as factor levels and scaling statistics) from `train_data` only.
-3.  **Bake:** Apply the trained preprocessing parameters to both `train_data` and `test_data`.
+Main observations: - Most utilization variables are right-skewed. - Many count variables contain mass near zero with long upper tails. - Readmitted patients tend to exhibit slightly heavier tails in prior utilization measures. - Considerable overlap remains between outcome groups, suggesting nonlinear boundaries may be useful.
 
+## Correlation Structure
+
+A correlation heatmap was used to assess dependence among numerical predictors.
+
+![Correlation heatmap for numerical predictors.](outputs/correlation_heatmap.png)
+
+Main observations: - Most pairwise correlations are low to moderate. - Stronger relationships appear among healthcare utilization variables including `time_in_hospital`, `num_medications`,`num_procedures`,`num_lab_procedures` - No severe multicollinearity pattern is evident. This supports the use of both linear and regularized models without major instability concerns.
+
+# Linear Modeling
+
+The first modeling stage focused on interpretable linear classification methods. Given the large number of categorical predictors after encoding, regularized logistic regression was prioritized over subset-selection procedures. Providing generally more stable, scalable, and better suited for higher-dimensional encoded feature spaces. - **Lasso Logistic Regression** ($L_1$ penalty) was used for coefficient shrinkage and automatic variable selection. - **Ridge Logistic Regression** ($L_2$ penalty) was used to reduce coefficient variance and stabilize estimates under correlated predictors. - Lasso can shrink some coefficients exactly to zero, producing a sparse model. - Ridge retains all predictors while shrinking coefficient magnitudes. - Both models use cross-validation to select the tuning parameter $\lambda$.
+
+## Preprocessing and Train-Test Split
+
+1.  **Train-Test Split:** The cleaned dataset was split into training and testing sets using a stratified **80/20 split** by `readmitted_binary`.
+2.  **Feature Encoding:** Categorical predictors were converted to one-hot dummy variables.
+3.  **Scaling:** Numeric predictors were standardized for regularized modeling.
+4.  **Applied to Test Set via Workflow:** The trained recipe was applied to the held-out test set through the same workflow.
+
+## Regularized Logistic Regression (LR)
+
+An elastic net logistic regression model was tuned using cross-validation, with **ROC AUC** as the optimization metric. The search varied: - `penalty` = regularization strength (\lambda) - `mixture` = penalty type parameter (0 for Ridge, 1 for Lasso) (\alpha)
+
+### Best Model Parameters
+
+The best-performing model from cross-validation was:
+
+| Penalty ((\lambda)) | Mixture ((\alpha)) | Selected Model | Config |
+|------------------:|------------------:|-----------------|-----------------|
+| 0.0774 | 0 | Ridge Logistic Regression | `pre0_mod17_post0` |
+
+The figure below shows the tuning search over penalty values and model types.
+
+![Cross-validation tuning surface for logistic penalty search.](outputs/logistic_lambda_search.png)
+
+The result indicates that shrinking all coefficients performed better than sparse variable selection. This suggests predictive information is distributed across many variables rather than concentrated in only a few predictors.
+
+### Important Predictors
+
+The table below shows the most meaningful predictors from the selected Ridge logistic regression model. Positive coefficients increase the log-odds of readmission, while negative coefficients decrease it.
+
+| Predictor | Coefficient | Interpretation |
+|----------------------|---------------------------:|----------------------|
+| `number_inpatient` | +0.1360 | Prior inpatient admissions are the strongest predictor of future readmission |
+| Discharged / transferred to another rehab facility | +0.1200 | Complex discharge pathways linked to elevated risk |
+| Discharged to home | -0.0889 | Returning home associated with lower readmission risk |
+| Expired | -0.0825 | Negative coefficient due to coding structure / terminal outcome |
+| Discharged to SNF | +0.0675 | Skilled nursing discharge associated with higher risk |
+| `time_in_hospital` | +0.0425 | Longer stays may indicate greater illness severity |
+| `number_diagnoses` | +0.0365 | More diagnoses imply higher comorbidity burden |
+| `diag_1_Respiratory` | -0.0361 | Respiratory primary diagnosis showed lower relative risk vs baseline group |
+| Age 50-60 | -0.0345 | Slightly lower risk relative to reference age category |
+| `diabetesMed_Yes` | +0.0332 | Medication usage may proxy greater disease severity |
+
+The strongest predictors are primarily related to: - prior healthcare utilization (`number_inpatient`, `number_emergency`) - discharge disposition - disease burden (`number_diagnoses`) - hospital stay intensity (`time_in_hospital`) - age and diagnosis categories This suggests readmission risk is driven more by patient complexity and prior utilization history than by any single demographic variable.
+
+### ROC Curve
+
+The ROC curve below shows test-set predictive discrimination for the selected Ridge logistic regression model.
+
+![Test ROC curve for the final ridge logistic regression model.](outputs/lr_final_roc_curve.png)
+
+### Performance Interpretation
+
+The final ridge logistic regression model achieved a **test ROC AUC of 0.648**, indicating meaningful predictive power above random guessing (AUC = 0.5). This confirms that the cleaned predictors contain useful signal for readmission prediction, even under a linear modeling framework.
+
+Key findings: - **Ridge and Lasso performed very similarly overall**, indicating that both regularization approaches were effective for this dataset. - **Ridge outperformed Lasso by a small margin** during cross-validation and was therefore selected as the final linear model. - The small performance gap suggests that predictive information is spread across many variables, with both sparse and shrinkage-based methods capturing similar structure. - Retaining all predictors with coefficient shrinkage provided a slight advantage over variable selection alone.
+
+### Conclusion
+
+Among linear models, **Ridge logistic regression** was the best-performing regularized classifier and was selected as the final logistic benchmark for subsequent model comparisons.
+
+## Generalized Additive Models (GAM)
+
+To relax the linearity assumption imposed by logistic regression, a **Generalized Additive Model (GAM)** was fitted on the same train/test split. GAMs extend logistic regression by allowing selected numerical predictors to have smooth nonlinear effects while preserving an additive and interpretable structure.
+
+The fitted model uses a **binomial family** with **logit link**, making it directly comparable to the earlier logistic regression models.
+
+### Model Specification and Complexity
+
+The GAM included smooth spline terms for continuous predictors and standard factor effects for categorical predictors. Predictor choices were based on logistic-model variable performance and clinical interpretability.
+
+| Smoothed Numerical Predictor |  EDF | Linear/Categorical Predictor |
+|------------------------------|-----:|------------------------------|
+| `time_in_hospital`           | 3.30 | `race`                       |
+| `num_lab_procedures`         | 2.18 | `gender`                     |
+| `num_medications`            | 1.04 | `age`                        |
+| `number_diagnoses`           | 2.39 | `diabetesMed`                |
+| `number_inpatient`           | 2.65 | `insulin`                    |
+| `number_emergency`           | 2.10 | `discharge_disposition_id`   |
+
+All smoothed terms were modeled with basis size **k = 5**. Total effective degrees of freedom: **39.65**. UBRE score: **-0.4338**.
+
+![Estimated smooth effects from the fitted GAM model.](outputs/gam_smooth_plots.png)
+
+### Interpretation
+
+The GAM achieved a **test ROC AUC of 0.648**, indicating meaningful predictive power above random guessing.
+
+Key variable insights: - `number_inpatient` showed the strongest increasing nonlinear effect. - `number_emergency` displayed a curved relationship. - Several predictors such as `num_medications` were nearly linear.
+
+### Conclusion
+
+The GAM provided an interpretable nonlinear extension of logistic regression and achieved competitive performance (**AUC = 0.648**). However, the similarity to regularized logistic models suggests that more complex interactions or ensemble methods may be needed for larger predictive gains.
+
+# Nonlinear Modeling
+
+After evaluating linear and additive models, the next stage focused on nonlinear machine learning methods that can capture complex interactions and nonlinearities without requiring explicit specification.
+
+## Random Forest (RF)
+
+To model nonlinear relationships and interaction effects, a **Random Forest** classifier was fitted. This approach can capture complex predictor interactions without requiring manual feature engineering.
+
+### Model Tuning
+
+The Random Forest model was tuned using cross-validation over: - `mtry` = number of predictors sampled at each split - `min_n` = minimum node size The number of trees was fixed at **500**, and **ROC AUC** was used as the primary tuning metric.
+
+### Interpretation of Metrics
+
+- **ROC AUC = 0.651** indicates modest predictive discrimination above random guessing.
+- **Accuracy = 0.909** is high, but heavily influenced by class imbalance.
+- **Precision = 0.909**, **Recall = 1.000**, and **F1 = 0.952** reflect threshold-based predictions that classified nearly all observations into the majority class.
+
+### Variable Importance
+
+The top predictors based on **Gini impurity importance** are shown below.
+
+![Random Forest variable importance ranked by Gini importance.](outputs/rf_variable_importance.png)
+
+These results suggest utilization intensity, treatment burden, and discharge outcomes are key drivers of readmission risk.
+
+### Conclusion
+
+Random Forest provided competitive predictive performance (**AUC = 0.651**) and highlighted important nonlinear predictors.
+
+## Gradient Boosted Trees (XGBoost)
+
+To further improve predictive performance, an **Extreme Gradient Boosting (XGBoost)** classifier was fitted using the same train/test split.
+
+This method is effective for structured tabular data because it captures nonlinear effects, predictor interactions, and complex decision boundaries while extracting robust signal from mixed feature types.
+
+### Model Tuning
+
+The model was tuned using cross-validation with racing methods over the following hyperparameters: - `tree_depth` - `min_n` - `loss_reduction` - `learn_rate` - `sample_size` The number of trees was fixed at **1000**, with **early stopping rounds = 10** to reduce overfitting.
+
+ROC AUC was used as the primary selection metric.
+
+### Interpretation of Metrics
+
+- **ROC AUC = 0.6558** was the strongest result among all models evaluated so far.
+- **Precision = 0.909** indicates that predicted positive cases were usually correct.
+- **Recall = 1.000** suggests the model identified all positive cases under the chosen threshold.
+- **F1 Score = 0.952** reflects strong balance between precision and recall.
+
+### Variable Importance
+
+The top predictors based on gain importance are shown below.
+
+![XGBoost variable importance ranked by gain.](outputs/xgb_variable_importance.png)
+
+These results reinforce earlier findings that prior utilization history, treatment intensity, and discharge pathways are the strongest signals of readmission risk.
+
+### Conclusion
+
+XGBoost achieved the highest ROC AUC, outperforming Random Forest and earlier interpretable models. This suggests that boosting was better able to exploit subtle nonlinear structure and interactions in the data.
+
+# Final Model Comparison
+
+## Test Set Performance
+
+| Model                     |   ROC AUC | Precision | Recall | F1 Score |
+|---------------------------|----------:|----------:|-------:|---------:|
+| Ridge Logistic Regression |     0.648 |     0.909 |  1.000 |    0.952 |
+| GAM                       |     0.648 |     0.909 |  1.000 |    0.952 |
+| Random Forest             |     0.651 |     0.909 |  1.000 |    0.952 |
+| XGBoost                   | **0.656** |     0.909 |  1.000 |    0.952 |
+
+Because the dataset is strongly imbalanced, **ROC AUC** is the most informative metric for comparing models. Accuracy, precision, recall, and F1-score are heavily affected by the default classification threshold and majority-class dominance. - **XGBoost achieved the best overall discrimination**(ROC AUC = 0.656), suggesting boosted trees captured nonlinear effects and interactions most effectively. - **Random Forest also performed strongly**, slightly outperforming linear and additive models. - **Ridge Logistic Regression matched GAM**, indicating that nonlinear smooth terms provided limited incremental benefit. - Performance differences across models were relatively modest, with all AUC values in the **0.648-0.656** range.
+
+## Threshold-Based Classification Behavior
+
+All models produced very similar precision, recall, and F1 values because the default classification cutoff led to predictions dominated by the majority class.
+
+| Metric | Ridge Logistic Regression | GAM | Random Forest | XGBoost |
+|---|---:|---:|---:|---:|
+| Predicted positive cases | 2 | 6 | 0 | 10 |
+
+This indicates that the probability ranking ability of the models is more meaningful than their raw class predictions under the default threshold.
+
+# Threshold Optimization
+
+Initial confusion matrices showed that several models predicted almost all observations as the majority class when using the default **0.50 probability cutoff**. This produced high accuracy but poor identification of true readmission cases.
+
+To improve minority-class detection, classification thresholds were re-optimized for each model using **Youden's J-statistic**:
+
+\[ J = \text{Sensitivity} + \text{Specificity} - 1 \]
+
+This criterion selects the threshold that best balances true positive rate and true negative rate.
+
+## Optimization Curves
+
+The figure below shows the Youden's J-statistic across possible thresholds for each model.
+
+![Youden's J-statistic curves used to select optimized probability thresholds.](outputs/threshold_optimization_plots.png)
+
+These thresholds are substantially lower than 0.50, which is expected in an imbalanced classification setting.
+
+## Tuned Confusion Matrices
+
+::: {.columns}
+::: {.column width="50%"}
+#### Ridge/Lasso (t = 0.084)
+
+| Prediction | True No | True Yes |
+|------------|--------:|---------:|
+| No         |   7,928 |      501 |
+| Yes        |   5,090 |      782 |
+:::
+::: {.column width="50%"}
+#### RF (t = 0.106)
+
+| Prediction | True No | True Yes |
+|------------|--------:|---------:|
+| No         |  10,027 |      727 |
+| Yes        |   2,966 |      581 |
+:::
+:::
+
+::: {.columns}
+::: {.column width="50%"}
+#### XGB (t = 0.079)
+
+| Prediction | True No | True Yes |
+|------------|--------:|---------:|
+| No         |   7,653 |      482 |
+| Yes        |   5,340 |      826 |
+:::
+::: {.column width="50%"}
+#### GAM (t = 0.075)
+
+| Prediction | True No | True Yes |
+|------------|--------:|---------:|
+| No         |   7,298 |      432 |
+| Yes        |   5,720 |      851 |
+:::
+:::
+
+## Interpretation
+
+Threshold tuning substantially changed model behavior: - All models became more willing to predict positive readmission cases. - Sensitivity improved sharply relative to the default 0.50 threshold. - This came at the cost of more false positives. Key comparisons: - **GAM** detected the most true positives (**851**). - **XGBoost** closely followed with **826** true positives. - **Lasso/Ridge Logistic Regression** achieved **782** true positives. - **Random Forest** was the most conservative after tuning, with fewer false positives but also fewer detected readmissions.
+
+## Conclusion
+
+Threshold optimization demonstrates that model performance is not determined only by algorithm choice, but also by **decision threshold selection**, to improve practical utility. In healthcare screening applications, a lower threshold may be preferred when missing a high-risk readmission is more costly than generating extra alerts.
+
+While XGBoost remained strongest in ROC AUC, **GAM and XGBoost produced the best readmission detection rates after threshold tuning**, making them attractive candidates for operational deployment depending on tolerance for false positives.
+
+# Final Conclusion
+
+This project used several machine learning methods to predict 30-day hospital readmission among diabetes patients. All models performed better than random guessing, with ROC AUC values between **0.648 and 0.656**.
+
+Among all models, **XGBoost achieved the best overall performance (AUC = 0.656)**, followed by **Random Forest (0.651)**. **Ridge Logistic Regression** and **GAM** both achieved **0.648**, showing that simpler and more interpretable models remained competitive.
+
+Across models, the most important predictors were related to prior healthcare utilization and patient severity, including: - prior inpatient visits - number of lab procedures - medication count - time in hospital - number of diagnoses - discharge disposition Because the dataset was highly imbalanced, default classification thresholds performed poorly at identifying true readmission cases. After threshold optimization, detection improved substantially, with **GAM** and **XGBoost** identifying the most positive readmission cases.
+
+Overall: - **Best overall predictive model:** XGBoost - **Best tuned detection performance:** GAM / XGBoost In conclusion, more complex models provided only modest gains. Future improvements will likely depend more on richer patient information and better threshold or cost-sensitive decision strategies than model complexity alone.

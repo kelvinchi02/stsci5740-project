@@ -74,9 +74,9 @@ To capture nonlinear effects while preserving interpretability, we also fit **Ge
 - GAMs use penalized splines to model nonlinear patterns in continuous predictors such as `age` and `time_in_hospital`.
 - This progression from regularized linear models to semi-parametric GAMs improves flexibility while preserving clinical interpretability.
 
-### Encoding and Train-Test Split
+### Preprocessing and Train-Test Split
 
 1.  **Initial Split:** Separate the cleaned data into `train_data` and `test_data` using an 80/20 split.
-2.  **Define Recipe:** Create the preprocessing blueprint (for example, dummy encoding and feature scaling).
-3.  **Prep:** Learn preprocessing parameters (such as factor levels and scaling statistics) from `train_data` only.
-4.  **Bake:** Apply the trained preprocessing parameters to both `train_data` and `test_data`.
+2.  **Prep:** Learn preprocessing parameters (such as factor levels and scaling statistics) from `train_data` only.
+3.  **Bake:** Apply the trained preprocessing parameters to both `train_data` and `test_data`.
+

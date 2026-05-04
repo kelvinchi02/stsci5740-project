@@ -126,7 +126,7 @@ An elastic net logistic regression model was tuned using cross-validation, with 
 The best-performing model from cross-validation was:
 
 | Penalty ((\lambda)) | Mixture ((\alpha)) | Selected Model | Config |
-|------------------:|------------------:|-----------------|-----------------|
+|------------------:|------------------:|------------------|------------------|
 | 0.0774 | 0 | Ridge Logistic Regression | `pre0_mod17_post0` |
 
 The figure below shows the tuning search over penalty values and model types.
@@ -213,13 +213,19 @@ To model nonlinear relationships and interaction effects, a **Random Forest** cl
 
 ### Model Tuning
 
-The Random Forest model was tuned using cross-validation over: - `mtry` = number of predictors sampled at each split - `min_n` = minimum node size The number of trees was fixed at **500**, and **ROC AUC** was used as the primary tuning metric.
+The Random Forest model was tuned using cross-validation over: - `mtry` = number of predictors sampled at each split - `min_n` = minimum node size The number of trees was fixed at **500**, and **PR AUC** was used as the primary tuning metric in the final imbalance-aware pass.
 
 ### Interpretation of Metrics
 
-- **ROC AUC = 0.651** indicates modest predictive discrimination above random guessing.
-- **Accuracy = 0.909** is high, but heavily influenced by class imbalance.
-- **Precision = 0.909**, **Recall = 1.000**, and **F1 = 0.952** reflect threshold-based predictions that classified nearly all observations into the majority class.
+Under the default class decision rule on the held-out test set, RF produced:
+
+- **PR AUC = 0.179**
+- **ROC AUC = 0.650**
+- **Balanced Accuracy = 0.500**
+- **Recall (Yes class) = 0.000**
+- **Specificity (Yes class) = 1.000**
+
+This indicates that while RF retained useful ranking ability (AUC above 0.5), default classification behavior did not identify positive readmissions. Therefore, threshold selection is a critical downstream decision.
 
 ### Variable Importance
 
@@ -231,7 +237,7 @@ These results suggest utilization intensity, treatment burden, and discharge out
 
 ### Conclusion
 
-Random Forest provided competitive predictive performance (**AUC = 0.651**) and highlighted important nonlinear predictors.
+Random Forest provided competitive ranking performance (**ROC AUC = 0.650**) and clear variable-importance signals, but required post-hoc threshold tuning for clinically useful detection.
 
 ## Gradient Boosted Trees (XGBoost)
 
@@ -247,10 +253,15 @@ ROC AUC was used as the primary selection metric.
 
 ### Interpretation of Metrics
 
-- **ROC AUC = 0.6558** was the strongest result among all models evaluated so far.
-- **Precision = 0.909** indicates that predicted positive cases were usually correct.
-- **Recall = 1.000** suggests the model identified all positive cases under the chosen threshold.
-- **F1 Score = 0.952** reflects strong balance between precision and recall.
+Under the default class decision rule on the held-out test set, XGBoost produced:
+
+- **ROC AUC = 0.651**
+- **PR AUC = 0.181**
+- **Balanced Accuracy = 0.500**
+- **Recall (Yes class) = 0.000**
+- **Specificity (Yes class) = 1.000**
+
+As with RF, the model showed useful ranking performance but default threshold behavior was too conservative for positive-case detection.
 
 ### Variable Importance
 
@@ -262,105 +273,145 @@ These results reinforce earlier findings that prior utilization history, treatme
 
 ### Conclusion
 
-XGBoost achieved the highest ROC AUC, outperforming Random Forest and earlier interpretable models. This suggests that boosting was better able to exploit subtle nonlinear structure and interactions in the data.
+XGBoost achieved the strongest ranking performance among evaluated models and became the leading candidate for objective-driven threshold tuning.
 
 # Final Model Comparison
 
 ## Test Set Performance
 
-| Model                     |   ROC AUC | Precision | Recall | F1 Score |
-|---------------------------|----------:|----------:|-------:|---------:|
-| Ridge Logistic Regression |     0.648 |     0.909 |  1.000 |    0.952 |
-| GAM                       |     0.648 |     0.909 |  1.000 |    0.952 |
-| Random Forest             |     0.651 |     0.909 |  1.000 |    0.952 |
-| XGBoost                   | **0.656** |     0.909 |  1.000 |    0.952 |
+| Model                     |   ROC AUC |    PR AUC |
+|---------------------------|----------:|----------:|
+| Ridge Logistic Regression |     0.648 |     0.167 |
+| GAM                       |     0.648 |     0.166 |
+| Random Forest             |     0.650 |     0.179 |
+| XGBoost                   | **0.651** | **0.181** |
 
-Because the dataset is strongly imbalanced, **ROC AUC** is the most informative metric for comparing models. Accuracy, precision, recall, and F1-score are heavily affected by the default classification threshold and majority-class dominance. - **XGBoost achieved the best overall discrimination**(ROC AUC = 0.656), suggesting boosted trees captured nonlinear effects and interactions most effectively. - **Random Forest also performed strongly**, slightly outperforming linear and additive models. - **Ridge Logistic Regression matched GAM**, indicating that nonlinear smooth terms provided limited incremental benefit. - Performance differences across models were relatively modest, with all AUC values in the **0.648-0.656** range.
+Because the dataset is strongly imbalanced, ranking metrics are the primary comparison basis.
+
+- **XGBoost achieved the best overall discrimination** in both ROC AUC and PR AUC among nonlinear models.
+- **Random Forest performed similarly in ROC AUC**, with slightly lower PR AUC.
+- **Ridge Logistic Regression and GAM remained competitive** in ROC AUC but trailed the tree-based models on PR AUC.
 
 ## Threshold-Based Classification Behavior
 
-All models produced very similar precision, recall, and F1 values because the default classification cutoff led to predictions dominated by the majority class.
+Default class predictions were not clinically usable for minority-case detection.
 
 | Metric | Ridge Logistic Regression | GAM | Random Forest | XGBoost |
-|---|---:|---:|---:|---:|
-| Predicted positive cases | 2 | 6 | 0 | 10 |
+|----|---:|---:|---:|---:|
+| Predicted positive cases (default threshold) | 2 | 6 | 0 | 0 |
 
-This indicates that the probability ranking ability of the models is more meaningful than their raw class predictions under the default threshold.
+This confirms that probability ranking ability is more meaningful than raw default-threshold class labels in this setting.
 
 # Threshold Optimization
 
-Initial confusion matrices showed that several models predicted almost all observations as the majority class when using the default **0.50 probability cutoff**. This produced high accuracy but poor identification of true readmission cases.
+To make thresholding deployment-oriented, thresholds were selected on **CV predictions from training data** under an explicit clinical objective, then evaluated once on the held-out test set.
 
-To improve minority-class detection, classification thresholds were re-optimized for each model using **Youden's J-statistic**:
+To prevent leakage, no held-out test labels were used during threshold selection.
 
-\[ J = \text{Sensitivity} + \text{Specificity} - 1 \]
+Clinical objective used in this project:
 
-This criterion selects the threshold that best balances true positive rate and true negative rate.
+- Min precision: **0.15**
+- Max alert rate: **0.30**
+- Among feasible thresholds, maximize recall.
+
+This supports a care-management screening workflow where missing high-risk patients is costly, while outreach capacity is limited.
 
 ## Optimization Curves
 
-The figure below shows the Youden's J-statistic across possible thresholds for each model.
+The figure below shows threshold tradeoffs used for objective-based selection.
 
-![Youden's J-statistic curves used to select optimized probability thresholds.](outputs/threshold_optimization_plots.png)
+![Clinical objective threshold tradeoff curves across models.](outputs/threshold_clinical_objective_plots.png)
 
-These thresholds are substantially lower than 0.50, which is expected in an imbalanced classification setting.
+Selected CV thresholds:
+
+| Model         | Threshold | Selection Mode    |
+|---------------|----------:|-------------------|
+| Lasso         |     0.097 | meets constraints |
+| Random Forest |     0.094 | meets constraints |
+| XGBoost       |     0.011 | meets constraints |
+| GAM           |     0.100 | meets constraints |
 
 ## Tuned Confusion Matrices
 
-::: {.columns}
+::::: columns
 ::: {.column width="50%"}
-#### Ridge/Lasso (t = 0.084)
+#### Ridge/Lasso (t = 0.097)
 
 | Prediction | True No | True Yes |
 |------------|--------:|---------:|
-| No         |   7,928 |      501 |
-| Yes        |   5,090 |      782 |
+| No         |   9,872 |      739 |
+| Yes        |   3,121 |      569 |
 :::
+
 ::: {.column width="50%"}
-#### RF (t = 0.106)
+#### RF (t = 0.094)
 
 | Prediction | True No | True Yes |
 |------------|--------:|---------:|
-| No         |  10,027 |      727 |
-| Yes        |   2,966 |      581 |
+| No         |   8,533 |      600 |
+| Yes        |   4,460 |      708 |
 :::
-:::
+:::::
 
-::: {.columns}
+::::: columns
 ::: {.column width="50%"}
-#### XGB (t = 0.079)
+#### XGB (t = 0.011)
 
 | Prediction | True No | True Yes |
 |------------|--------:|---------:|
-| No         |   7,653 |      482 |
-| Yes        |   5,340 |      826 |
+| No         |   9,745 |      710 |
+| Yes        |   3,248 |      598 |
 :::
+
 ::: {.column width="50%"}
-#### GAM (t = 0.075)
+#### GAM (t = 0.100)
 
 | Prediction | True No | True Yes |
 |------------|--------:|---------:|
-| No         |   7,298 |      432 |
-| Yes        |   5,720 |      851 |
+| No         |   9,963 |      745 |
+| Yes        |   3,030 |      563 |
 :::
-:::
+:::::
 
 ## Interpretation
 
-Threshold tuning substantially changed model behavior: - All models became more willing to predict positive readmission cases. - Sensitivity improved sharply relative to the default 0.50 threshold. - This came at the cost of more false positives. Key comparisons: - **GAM** detected the most true positives (**851**). - **XGBoost** closely followed with **826** true positives. - **Lasso/Ridge Logistic Regression** achieved **782** true positives. - **Random Forest** was the most conservative after tuning, with fewer false positives but also fewer detected readmissions.
+Held-out test objective check:
+
+| Model | Precision | Recall | Specificity | F1 | Balanced Accuracy | Alert Rate | Meets Objective |
+|---------|--------:|--------:|--------:|--------:|--------:|--------:|---------|
+| Lasso | 0.154 | 0.435 | 0.760 | 0.228 | 0.597 | 0.258 | Yes |
+| Random Forest | 0.137 | 0.541 | 0.657 | 0.219 | 0.599 | 0.361 | No |
+| XGBoost | 0.155 | 0.457 | 0.750 | 0.232 | 0.604 | 0.269 | Yes |
+| GAM | 0.157 | 0.430 | 0.767 | 0.230 | 0.599 | 0.251 | Yes |
+
+Interpretation:
+
+- **XGBoost best satisfied the practical objective**, providing the highest recall among objective-feasible models.
+- **Random Forest had higher recall but exceeded outreach capacity and failed the precision floor**, so it is not operationally feasible under this objective.
+- **Lasso and GAM met constraints** with slightly lower recall than XGBoost.
 
 ## Conclusion
 
-Threshold optimization demonstrates that model performance is not determined only by algorithm choice, but also by **decision threshold selection**, to improve practical utility. In healthcare screening applications, a lower threshold may be preferred when missing a high-risk readmission is more costly than generating extra alerts.
-
-While XGBoost remained strongest in ROC AUC, **GAM and XGBoost produced the best readmission detection rates after threshold tuning**, making them attractive candidates for operational deployment depending on tolerance for false positives.
+Threshold selection had a larger practical effect than algorithm changes alone. Under a clinically constrained objective, **XGBoost (threshold = 0.011)** provided the best balance between detection and operational capacity.
 
 # Final Conclusion
 
-This project used several machine learning methods to predict 30-day hospital readmission among diabetes patients. All models performed better than random guessing, with ROC AUC values between **0.648 and 0.656**.
+This project compared linear, additive, and tree-based models for 30-day readmission risk and found modest but consistent discrimination (ROC AUC roughly **0.648 to 0.651**).
 
-Among all models, **XGBoost achieved the best overall performance (AUC = 0.656)**, followed by **Random Forest (0.651)**. **Ridge Logistic Regression** and **GAM** both achieved **0.648**, showing that simpler and more interpretable models remained competitive.
+Key findings:
 
-Across models, the most important predictors were related to prior healthcare utilization and patient severity, including: - prior inpatient visits - number of lab procedures - medication count - time in hospital - number of diagnoses - discharge disposition Because the dataset was highly imbalanced, default classification thresholds performed poorly at identifying true readmission cases. After threshold optimization, detection improved substantially, with **GAM** and **XGBoost** identifying the most positive readmission cases.
+- **Best ranking model:** XGBoost (ROC AUC 0.651, PR AUC 0.181).
+- **Default class thresholds were not clinically useful** in this imbalanced setting.
+- **Leakage-safe threshold workflow:** thresholds were chosen using CV predictions from training data and only then applied to the held-out test set.
+- **Objective-driven thresholding was essential** for deployment realism.
 
-Overall: - **Best overall predictive model:** XGBoost - **Best tuned detection performance:** GAM / XGBoost In conclusion, more complex models provided only modest gains. Future improvements will likely depend more on richer patient information and better threshold or cost-sensitive decision strategies than model complexity alone.
+Using a practical care-management objective (minimum precision 0.15, maximum alert rate 0.30), **XGBoost** was selected as the operational recommendation. On held-out test data at threshold **0.011**, it achieved:
+
+- Precision: **0.155**
+- Recall: **0.457**
+- Specificity: **0.750**
+- F1: **0.232**
+- Balanced Accuracy: **0.604**
+- Alert Rate: **0.269**
+
+Overall conclusion: for this dataset, model choice matters, but **threshold policy under clinical constraints matters at least as much** for practical utility.

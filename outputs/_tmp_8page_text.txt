@@ -1,0 +1,446 @@
+﻿STSCI 5740 Project Report
+Kelvin Chi (kc2346), Nina Wang (nw348), Tianle Pang (tp439), Xibei Xie (xx375)
+
+1 Introduction
+This report presents a machine-learning analysis of 30-day readmission among diabetes-related encounters
+using the UCI Diabetes 130-US hospitals dataset (1999-2008). The dataset contains demographic
+variables, diagnosis fields, laboratory information, medication records, and prior utilization history from
+130 U.S. hospitals.
+Linear, additive, and tree-based classifiers are compared under class imbalance, and ranking performance
+is subsequently mapped to an operational threshold policy. The primary objective is to identify a
+model-threshold pair that satisfies a minimum precision requirement while maintaining outreach volume
+within capacity constraints.
+Project repository: stsci5740-project.
+
+2 Data Preparation
+Raw data contained 101,766 encounters. Cleaning was performed to create a patient-level modeling
+dataset suitable for fair train-test evaluation.
+2.1 Cleaning Steps
+1. Patient-level deduplication: Keep the first encounter per unique patient_nbr to avoid repeatedobservation dependence. Sample size reduced to 71,518 rows.
+2. Sparse feature removal: Remove weight (96.01% missing), medical_specialty (48.21% missing),
+and payer_code (43.41% missing).
+3. Missing and invalid value treatment: Recode race missing as Other, keep None as valid category for
+max_glu_serum and A1Cresult, remove gender = Unknown/Invalid, remove 11 missing diag_1
+rows, and recode missing diag_2/diag_3 as None.
+4. Diagnosis consolidation: Group high-cardinality ICD-9 codes in diag_1, diag_2, and diag_3 into
+clinically meaningful categories.
+5. Metadata mapping: Convert coded administrative IDs to descriptive labels.
+6. Target creation: Build binary readmitted_binary, where 1 indicates <30 and 0 indicates >30 or
+NO.
+Final modeling dataset:
+
+鈥?71,504 observations
+鈥?47 variables
+
+3 EDA Summary
+3.1 Outcome Imbalance
+Readmission within 30 days is rare: 65,213 negatives versus 6,291 positives (8.8% positive rate). This
+motivates ranking metrics (ROC AUC, PR AUC) and threshold-policy analysis, rather than relying
+only on default class predictions.
+3.2 Predictor Patterns
+鈥?Categorical distributions are uneven across race, age, and administrative fields.
+鈥?Medication indicators are dominated by the No level.
+鈥?Numeric utilization variables are right-skewed with long tails.
+鈥?Correlation structure is mostly low to moderate, with stronger links among utilization measures.
+These patterns support testing both regularized linear methods and nonlinear models.
+
+4 Modeling Design
+4.1 Split, Preprocessing, Metrics
+鈥?Stratified 80/20 train-test split by readmitted_binary
+鈥?One-hot encoding for categorical variables; scaling for regularized linear models
+鈥?Primary ranking metrics: ROC AUC and PR AUC
+鈥?Classification behavior evaluated with precision, recall, specificity, and confusion matrices
+4.2 Candidate Models
+Model
+Core Setup
+Final Tuning Focus
+Ridge/Lasso Logistic Regression Elastic net logistic regression with ROC AUC
+CV over penalty and mixture
+GAM
+Additive logistic model with
+Fixed smooth structure;
+smooth terms on
+evaluated on held-out test
+utilization-related numeric
+predictors
+Random Forest
+Tree ensemble tuned over mtry PR AUC (imbalance-aware final
+and min_n
+pass)
+XGBoost
+Gradient-boosted trees with
+ROC AUC
+racing and early stopping
+Model assessment was conducted in two stages: first by ranking metrics on held-out data, and then
+by objective-constrained threshold evaluation. This structure separates discrimination quality from
+
+operational decision policy and improves interpretability of the final recommendation.
+
+5 Linear and Additive Model Findings
+5.1 Ridge Logistic Regression
+Cross-validation selected a Ridge-dominant elastic net configuration.
+Penalty (lambda) Mixture (alpha) Selected Linear Model
+0.0774
+0.0 Ridge Logistic Regression
+Key coefficient patterns from the selected ridge model:
+Predictor
+number_inpatient
+
+Coefficient Directional interpretation
++0.1360 Stronger prior inpatient
+burden increases risk
++0.1200 Complex discharge pathways
+signal higher risk
+-0.0889 Home discharge associated
+with lower risk
++0.0425 Longer stay proxies higher
+severity
++0.0365 Greater comorbidity burden
+increases risk
++0.0332 Medication use likely captures
+disease intensity
+
+Discharged/transferred to
+rehab facility
+Discharged to home
+time_in_hospital
+number_diagnoses
+diabetesMed_Yes
+
+Ridge achieved ROC AUC 0.648 and PR AUC 0.167 on held-out test data.
+
+Figure 1: Test ROC curve for the final ridge logistic regression model.
+
+5.2 Generalized Additive Model (GAM)
+The GAM relaxed linearity for key utilization predictors while keeping additive interpretability.
+Smoothed Numerical Predictor EDF
+time_in_hospital
+3.30
+num_lab_procedures
+2.18
+num_medications
+1.04
+number_diagnoses
+2.39
+number_inpatient
+2.65
+
+Smoothed Numerical Predictor EDF
+number_emergency
+2.10
+GAM delivered ROC AUC 0.648 and PR AUC 0.166, indicating competitive discrimination but limited
+gain over ridge in this dataset.
+
+6 Tree-Based Model Findings
+Random Forest and XGBoost improved ranking metrics relative to linear/additive models, but default
+thresholds were too conservative for positive-class detection.
+鈥?Random Forest: ROC AUC 0.650, PR AUC 0.179
+鈥?XGBoost: ROC AUC 0.651, PR AUC 0.181
+Both models predicted almost no positive cases under default decision thresholds, which made post-model
+threshold optimization essential.
+XGBoost feature importance further highlighted utilization intensity and discharge pathway variables as
+dominant contributors.
+
+Figure 2: XGBoost variable importance ranked by gain.
+
+6.1 XGBoost ROC Diagnostic
+The held-out ROC curve confirms stable discrimination for XGBoost at the ranking stage before
+threshold tuning.
+
+Figure 3: XGBoost final ROC curve on held-out test set.
+
+7 Consolidated Model Results (Default Thresholds)
+The table below merges key test-set default-threshold results across all models to reduce duplication
+and keep comparisons aligned.
+Model
+Ridge
+Logistic
+Regression
+GAM
+Random
+Forest
+XGBoost
+
+Default
+Precision Default Recall
+0.909
+1.000
+
+Default
+Predicted
+Specificity Positive Cases
+0.001
+2
+
+ROC AUC
+0.648
+
+PR AUC
+0.167
+
+0.648
+0.650
+
+0.166
+0.179
+
+0.909
+N/A
+
+1.000
+0.000
+
+0.002
+1.000
+
+6
+0
+
+0.651
+
+0.181
+
+N/A
+
+0.000
+
+1.000
+
+0
+
+N/A precision for RF/XGBoost occurs because no positive events were predicted under default thresholds.
+Interpretation:
+鈥?XGBoost had the strongest ranking performance (ROC AUC and PR AUC).
+鈥?RF was close in ROC AUC but slightly lower in PR AUC.
+鈥?Ridge and GAM remained competitive in ROC AUC but weaker on PR AUC and unsuitable as-is
+under default classification thresholds.
+
+8 Threshold Optimization
+Thresholds were selected on CV predictions from training data and evaluated once on held-out test data.
+No held-out test labels were used during threshold selection.
+Clinical objective:
+鈥?Minimum precision: 0.15
+鈥?Maximum alert rate: 0.30
+鈥?Among feasible thresholds, maximize recall
+
+8.1 Threshold Tradeoff Plot
+
+Figure 4: Clinical objective threshold tradeoff curves across models.
+
+8.2 Selected CV Thresholds
+Model
+Threshold Selection Mode
+Lasso
+0.097 meets constraints
+Random Forest
+0.094 meets constraints
+XGBoost
+0.011 meets constraints
+GAM
+0.100 meets constraints
+8.3 Held-out Objective Check
+Model
+Lasso
+Random
+Forest
+XGBoost
+GAM
+
+Precision
+0.154
+0.137
+
+Recall
+0.435
+0.541
+
+Specificity
+0.760
+0.657
+
+F1
+0.228
+0.219
+
+Balanced
+Accuracy
+0.597
+0.599
+
+0.155
+0.157
+
+0.457
+0.430
+
+0.750
+0.767
+
+0.232
+0.230
+
+0.604
+0.599
+
+Meets
+Alert Rate Objective
+0.258 Yes
+0.361 No
+0.269 Yes
+0.251 Yes
+
+8.4 Tuned Confusion Matrix Counts
+Model
+TN FP FN TP
+Lasso
+9,872 3,121 739 569
+Random Forest 8,533 4,460 600 708
+XGBoost
+9,745 3,248 710 598
+GAM
+9,963 3,030 745 563
+8.5 Error Tradeoff View
+To compare operational error patterns beyond recall and precision alone, we summarize false-negative
+and false-positive rates under each tuned threshold.
+Model
+Lasso
+
+False Negative Rate
+0.565
+
+False Positive Rate Interpretation
+0.240 Lower alert burden
+than RF, but misses
+more positives
+
+Model
+Random Forest
+
+False Negative Rate
+0.459
+
+XGBoost
+
+0.543
+
+GAM
+
+0.570
+
+False Positive Rate Interpretation
+0.343 Best capture of
+positives, but too
+many alerts
+0.250 Balanced error profile
+under objective
+constraints
+0.233 Lowest false positives
+among feasible
+models, but highest
+misses
+
+This comparison reinforces the final choice: XGBoost is not the most aggressive detector, but it provides
+the strongest feasible recall while keeping false-positive burden within the stated project constraints.
+Interpretation of objective-constrained tuning:
+鈥?Random Forest achieved the highest recall but violated operational constraints due to low precision
+and high alert rate.
+鈥?XGBoost, Lasso, and GAM all satisfied objective constraints on held-out data.
+鈥?XGBoost was selected because it provided the best recall among feasible options while maintaining
+precision and alert-rate limits.
+Recommendation under objective constraints: XGBoost at threshold 0.011.
+
+9 Model Selection Rationale
+Two-stage model selection was used so that ranking quality and operational feasibility were both
+evaluated explicitly.
+9.1 Stage 1: Ranking Performance
+Initial comparison prioritized ROC AUC and PR AUC. XGBoost and RF led this stage, while Ridge
+and GAM remained competitive but lower on PR AUC.
+9.2 Stage 2: Objective-Constrained Thresholding
+Thresholds were then chosen from CV predictions under the project objective (minimum precision 0.15,
+maximum alert rate 0.30, maximize recall).
+Model
+XGBoost
+
+Stage 1 Ranking Position Meets Objective
+1
+Yes
+
+Random Forest
+
+2
+
+No
+
+Key reason
+Best feasible recall under
+precision and alert-rate
+limits
+Recall high but alert rate
+too high and precision
+too low
+
+Model
+Lasso/Ridge
+
+Stage 1 Ranking Position Meets Objective
+3
+Yes (Lasso threshold)
+
+GAM
+
+4
+
+Yes
+
+Key reason
+Feasible but lower recall
+than XGBoost
+Feasible and stable, but
+recall below XGBoost
+
+This stage-wise process explains why the final recommendation is XGBoost even though Random Forest
+had higher raw recall after tuning.
+9.3 Validity and Reproducibility Considerations
+Methodological validity was strengthened through stratified train-test splitting, workflow-based preprocessing, and strict separation between threshold tuning on cross-validation predictions and final
+evaluation on held-out test data. This design reduces optimistic bias and clarifies the difference between
+ranking quality (ROC AUC, PR AUC) and thresholded operating performance (precision, recall, alert
+rate). The full pipeline is reproducible from the cleaned dataset and saved model artifacts.
+
+10 Final Conclusion
+Model choice improved ranking performance modestly (ROC AUC 0.648 to 0.651), but operational
+utility depended more strongly on threshold policy than on algorithm selection alone. Under a caremanagement objective with explicit precision and capacity constraints, XGBoost provided the most
+suitable deployable balance:
+鈥?Precision: 0.155
+鈥?Recall: 0.457
+鈥?Specificity: 0.750
+鈥?F1: 0.232
+鈥?Balanced Accuracy: 0.604
+鈥?Alert Rate: 0.269
+Methodological implications:
+鈥?A leakage-safe threshold workflow should be treated as an integral component of model development
+rather than a post-hoc reporting step.
+鈥?In imbalanced readmission prediction, ranking metrics and objective-constrained threshold policies
+are more decision-relevant than default class labels.
+鈥?The selected model is justified by feasibility under explicit precision and alert-rate constraints, not
+by ROC AUC alone.
+
+Appendix
+10.1 EDA Figures
+
+Figure 5: Numerical predictor density plots by readmission status.
+
+Figure 6: Correlation heatmap for numerical predictors.
+
+10.2 Linear/GAM Diagnostics
+
+Figure 7: Cross-validation tuning surface for logistic penalty search.
+
+Figure 8: Test ROC curve for the final ridge logistic regression model.
+
+Figure 9: Estimated smooth effects from the fitted GAM model.
+
+10.3 Tree-Model Diagnostics
+
+Figure 10: Random Forest variable importance ranked by Gini importance.
+
+

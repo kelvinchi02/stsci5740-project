@@ -22,13 +22,14 @@ format:
         \usepackage{caption}
         \usepackage{array}
         \usepackage{tabularx}
+        \usepackage{adjustbox}
         \usepackage{titling}
         \DeclareCaptionFont{eightpt}{\fontsize{8}{9.6}\selectfont}
         \newcommand{\tablefont}{\fontsize{9}{10.2}\selectfont}
         \newcommand{\ninept}{\fontsize{9}{10.8}\selectfont}
         \captionsetup[figure]{font=eightpt}
-        \setlength{\tabcolsep}{2pt}
-        \renewcommand{\arraystretch}{0.92}
+        \setlength{\tabcolsep}{1.8pt}
+        \renewcommand{\arraystretch}{0.88}
         \setlength{\aboverulesep}{0pt}
         \setlength{\belowrulesep}{0pt}
         \setlength{\extrarowheight}{0pt}
@@ -37,9 +38,11 @@ format:
         \setkeys{Gin}{width=0.45\linewidth,keepaspectratio=true}
         \AtBeginEnvironment{figure}{\centering}
         \AtBeginEnvironment{table}{\tablefont\setstretch{0.95}}
-        \AtBeginEnvironment{longtable}{\tablefont\setstretch{0.95}}
-        \AtBeginEnvironment{tabular}{\tablefont\setstretch{0.95}}
-        \AtBeginEnvironment{tabularx}{\tablefont\setstretch{0.95}}
+        \AtBeginEnvironment{longtable}{\tablefont\setstretch{0.92}}
+        \AtBeginEnvironment{tabular}{\begin{adjustbox}{max width=\linewidth}\tablefont\setstretch{0.95}}
+        \AtEndEnvironment{tabular}{\end{adjustbox}}
+        \AtBeginEnvironment{tabularx}{\begin{adjustbox}{max width=\linewidth}\tablefont\setstretch{0.95}}
+        \AtEndEnvironment{tabularx}{\end{adjustbox}}
         \pretitle{\begin{center}\fontsize{14}{16}\selectfont\bfseries}
         \posttitle{\par\end{center}\vspace{-0.9em}}
         \preauthor{\begin{center}\fontsize{9.5}{11}\selectfont}
@@ -143,8 +146,8 @@ Key coefficient patterns from the selected ridge model:
 | Predictor | Coefficient | Directional interpretation |
 |---|---:|---|
 | `number_inpatient` | +0.1360 | Stronger prior inpatient burden increases risk |
-| Discharged/transferred to rehab facility | +0.1200 | Complex discharge pathways signal higher risk |
-| Discharged to home | -0.0889 | Home discharge associated with lower risk |
+| `Discharged/transferred to rehab facility` | +0.1200 | Complex discharge pathways signal higher risk |
+| `Discharged to home` | -0.0889 | Home discharge associated with lower risk |
 | `time_in_hospital` | +0.0425 | Longer stay proxies higher severity |
 | `number_diagnoses` | +0.0365 | Greater comorbidity burden increases risk |
 | `diabetesMed_Yes` | +0.0332 | Medication use likely captures disease intensity |
